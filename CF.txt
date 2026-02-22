@@ -1,0 +1,362 @@
+import os
+import customtkinter as ctk
+from PIL import Image
+
+# ========= TEMA / CORES =========
+ctk.set_appearance_mode("light")     # fundo claro
+ctk.set_default_color_theme("blue")  # vamos setar roxo nos botões manualmente
+
+WHITE = "#FFFFFF"
+BLACK = "#111111"
+PURPLE = "#6D28D9"   # roxo bonito
+PURPLE_HOVER = "#5B21B6"
+BORDER = "#E5E7EB"
+
+# ========= APP =========
+class App(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("Music Player")
+        self.geometry("1100x650")
+        self.minsize(1000, 600)
+        self.configure(fg_color=WHITE)
+
+        self.user_db = {"Teste": "5577"}  # depois trocamos por sqlite
+
+        self.container = ctk.CTkFrame(self, fg_color=WHITE)
+        self.container.pack(fill="both", expand=True)
+
+        self.show_login()
+
+    def clear_container(self):
+        for w in self.container.winfo_children():
+            w.destroy()
+
+    def show_login(self):
+        self.clear_container()
+        LoginScreen(self.container, on_success=self.show_home).pack(fill="both", expand=True)
+
+    def show_home(self):
+        self.clear_container()
+        HomeScreen(self.container).pack(fill="both", expand=True)
+
+
+# ========= LOGIN =========
+class LoginScreen(ctk.CTkFrame):
+    def __init__(self, master, on_success):
+        super().__init__(master, fg_color=WHITE)
+        self.on_success = on_success
+
+        card = ctk.CTkFrame(self, fg_color=WHITE, corner_radius=16, border_width=1, border_color=BORDER)
+        card.place(relx=0.5, rely=0.5, anchor="center")
+
+        ctk.CTkLabel(card, text="Entrar", text_color=BLACK, font=ctk.CTkFont(size=22, weight="bold")).pack(pady=(20, 10))
+
+        self.user = ctk.CTkEntry(card, width=320, placeholder_text="Usuário", fg_color=WHITE, text_color=BLACK, border_color=BORDER)
+        self.user.pack(pady=8, padx=22)
+
+        self.pwd = ctk.CTkEntry(card, width=320, placeholder_text="Senha", show="*", fg_color=WHITE, text_color=BLACK, border_color=BORDER)
+        self.pwd.pack(pady=8, padx=22)
+
+        self.msg = ctk.CTkLabel(card, text="", text_color="red")
+        self.msg.pack(pady=(6, 0))
+
+        btn = ctk.CTkButton(
+            card, text="Entrar",
+            fg_color=PURPLE, hover_color=PURPLE_HOVER,
+            text_color="white",
+            command=self.login
+        )
+        btn.pack(pady=(14, 22))
+
+    def login(self):
+        u = self.user.get().strip()
+        p = self.pwd.get().strip()
+
+        # valida simples
+        if u == "Teste" and p == "5577":
+            self.msg.configure(text="Login feito com sucesso", text_color="green")
+            self.after(300, self.on_success)
+        else:
+            self.msg.configure(text="Usuário ou senha incorretos", text_color="red")
+
+
+# ========= HOME / SPOTIFY-LIKE =========
+class HomeScreen(ctk.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master, fg_color=WHITE)
+
+        # assets (imagens)
+        self.assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+        self._img_cache = {}  # evita sumir imagem (garbage collector)
+
+        # um "catálogo demo" pra pesquisa (músicas fora da playlist)
+        self.music_catalog = [
+            {"title": "Blinding Lights", "genre": "Pop"},
+            {"title": "Levitating", "genre": "Pop"},
+            {"title": "Smells Like Teen Spirit", "genre": "Rock"},
+            {"title": "Enter Sandman", "genre": "Rock"},
+            {"title": "Evidências", "genre": "Sertanejo"},
+            {"title": "Boate Azul", "genre": "Sertanejo"},
+            {"title": "Billie Jean", "genre": "Pop"},
+            {"title": "Numb", "genre": "Rock"},
+        ]
+
+        # layout: sidebar (esq) + main (centro)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        self.sidebar = ctk.CTkFrame(self, fg_color=WHITE, border_width=1, border_color=BORDER, corner_radius=0, width=260)
+        self.sidebar.grid(row=0, column=0, sticky="nsew")
+        self.sidebar.grid_propagate(False)
+
+        self.main = ctk.CTkFrame(self, fg_color=WHITE, corner_radius=0)
+        self.main.grid(row=0, column=1, sticky="nsew")
+
+        # player bar embaixo ocupando tudo
+        self.player = ctk.CTkFrame(self, fg_color=WHITE, border_width=1, border_color=BORDER, corner_radius=0, height=90)
+        self.player.grid(row=1, column=0, columnspan=2, sticky="ew")
+        self.player.grid_propagate(False)
+
+        self.build_sidebar()
+        self.build_main()
+        self.build_player()
+
+    # ---------- helpers ----------
+    def _load_ctk_image(self, filename, size=(120, 120)):
+        """
+        Carrega imagem do /assets e retorna CTkImage.
+        Se não existir, retorna None (o app mostra placeholder).
+        """
+        if not filename:
+            return None
+
+        path = os.path.join(self.assets_dir, filename)
+        if path in self._img_cache:
+            return self._img_cache[path]
+
+        if not os.path.exists(path):
+            return None
+
+        img = Image.open(path)
+        ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=size)
+        self._img_cache[path] = ctk_img
+        return ctk_img
+
+    def _clear_main(self):
+        for w in self.main.winfo_children():
+            w.destroy()
+
+    # ---------- sidebar ----------
+    def build_sidebar(self):
+        ctk.CTkLabel(self.sidebar, text="Sua Biblioteca", text_color=BLACK,
+                     font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(18, 10), padx=16, anchor="w")
+
+        # ====== PESQUISA (campo + botão) ======
+        search_row = ctk.CTkFrame(self.sidebar, fg_color=WHITE)
+        search_row.pack(padx=16, pady=(0, 14), fill="x")
+
+        self.search = ctk.CTkEntry(
+            search_row,
+            placeholder_text="Pesquisar música...",
+            fg_color=WHITE,
+            text_color=BLACK,
+            border_color=BORDER
+        )
+        self.search.pack(side="left", fill="x", expand=True)
+
+        self.search_btn = ctk.CTkButton(
+            search_row,
+            text="🔍",
+            width=40,
+            fg_color=PURPLE,
+            hover_color=PURPLE_HOVER,
+            text_color="white",
+            command=self.search_music
+        )
+        self.search_btn.pack(side="left", padx=(8, 0))
+
+        ctk.CTkLabel(self.sidebar, text="Playlists", text_color=BLACK,
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(padx=16, anchor="w")
+
+        # ====== TROCA SOLICITADA (azul) ======
+        playlists = ["Favoritos", "Pop", "Rock", "Sertanejo"]
+
+        for name in playlists:
+            item = ctk.CTkButton(
+                self.sidebar,
+                text=name,
+                anchor="w",
+                fg_color=WHITE,
+                hover_color="#F3F4F6",
+                text_color=BLACK,
+                border_width=1,
+                border_color=BORDER
+            )
+            item.pack(padx=16, pady=6, fill="x")
+
+        ctk.CTkLabel(self.sidebar, text="Perfil: Guilherme", text_color=BLACK).pack(padx=16, pady=(18, 0), anchor="w")
+
+    # ---------- main (home) ----------
+    def build_main(self):
+        self._clear_main()
+
+        top = ctk.CTkFrame(self.main, fg_color=WHITE)
+        top.pack(fill="x", padx=20, pady=18)
+
+        self.main_title = ctk.CTkLabel(
+            top,
+            text="O que você quer ouvir?",
+            text_color=BLACK,
+            font=ctk.CTkFont(size=20, weight="bold")
+        )
+        self.main_title.pack(anchor="w")
+
+        # área onde renderizamos cards
+        self.grid_area = ctk.CTkFrame(self.main, fg_color=WHITE)
+        self.grid_area.pack(fill="both", expand=True, padx=20, pady=(0, 12))
+
+        # lista padrão de álbuns (a mesma sua)
+        self.default_albums = [
+            ("POP", "Pop", "pop.png"),
+            ("ROCK", "Metal", "rock.png"),
+            ("SERTANEJO", "Sertanejo", "sertanejo.png"),
+            ("Favoritos", "Mix", "favoritos.png"),
+            ("Daily Mix 01", "Vibes", "mix1.png"),
+            ("Daily Mix 02", "Rap", "mix2.png"),
+            ("Daily Mix 03", "Hits", "mix3.png"),
+            ("Daily Mix 04", "Soft", "mix4.png"),
+        ]
+
+        self.render_album_grid(self.default_albums)
+
+    def render_album_grid(self, albums):
+        # limpa grid area
+        for w in self.grid_area.winfo_children():
+            w.destroy()
+
+        cols = 4
+        for c in range(cols):
+            self.grid_area.grid_columnconfigure(c, weight=1)
+
+        for i, (title, genre, img_file) in enumerate(albums):
+            r, c = divmod(i, cols)
+            card = ctk.CTkFrame(self.grid_area, fg_color=WHITE, border_width=1, border_color=BORDER, corner_radius=14)
+            card.grid(row=r, column=c, padx=10, pady=10, sticky="nsew")
+
+            # ====== CAPA COM IMAGEM (circulo vermelho) ======
+            cover = ctk.CTkFrame(card, fg_color="#F3F4F6", corner_radius=12, height=120)
+            cover.pack(fill="x", padx=12, pady=(12, 10))
+            cover.pack_propagate(False)
+
+            ctk_img = self._load_ctk_image(img_file, size=(120, 120))
+            if ctk_img:
+                lbl_img = ctk.CTkLabel(cover, text="", image=ctk_img)
+                lbl_img.pack(expand=True)
+            else:
+                # placeholder se faltar a imagem
+                ctk.CTkLabel(cover, text="Capa", text_color="#6B7280").pack(expand=True)
+
+            ctk.CTkLabel(card, text=title, text_color=BLACK,
+                         font=ctk.CTkFont(size=14, weight="bold")).pack(padx=12, anchor="w")
+            ctk.CTkLabel(card, text=genre, text_color="#4B5563").pack(padx=12, pady=(0, 12), anchor="w")
+
+    # ---------- search ----------
+    def search_music(self):
+        q = self.search.get().strip().lower()
+
+        if not q:
+            # se vazio, volta pro padrão
+            self.main_title.configure(text="O que você quer ouvir?")
+            self.render_album_grid(self.default_albums)
+            return
+
+        results = [m for m in self.music_catalog if q in m["title"].lower() or q in m["genre"].lower()]
+
+        self._show_search_results(q, results)
+
+    def _show_search_results(self, q, results):
+        # título
+        self.main_title.configure(text=f"Resultados para: {q}")
+
+        # transforma resultados em "cards tipo álbum"
+        # (usa imagem por gênero)
+        genre_img = {
+            "pop": "pop.png",
+            "rock": "rock.png",
+            "sertanejo": "sertanejo.png",
+        }
+
+        albums = []
+        for m in results:
+            g = m["genre"]
+            img = genre_img.get(g.lower(), "favoritos.png")
+            albums.append((m["title"], g, img))
+
+        if not albums:
+            albums = [("Nenhum resultado encontrado", "Tente outro termo", "favoritos.png")]
+
+        self.render_album_grid(albums)
+
+        # botão "voltar" simples (aparece no fim do grid)
+        back_row = (len(albums) // 4) + 1
+        back = ctk.CTkButton(
+            self.grid_area,
+            text="Voltar",
+            fg_color=PURPLE,
+            hover_color=PURPLE_HOVER,
+            text_color="white",
+            command=self._back_to_home
+        )
+        back.grid(row=back_row, column=0, padx=10, pady=14, sticky="w")
+
+    def _back_to_home(self):
+        self.search.delete(0, "end")
+        self.main_title.configure(text="O que você quer ouvir?")
+        self.render_album_grid(self.default_albums)
+
+    # ---------- player ----------
+    def build_player(self):
+        self.player.grid_columnconfigure(1, weight=1)
+
+        # esquerda: música atual
+        left = ctk.CTkFrame(self.player, fg_color=WHITE)
+        left.grid(row=0, column=0, sticky="w", padx=14)
+
+        cover = ctk.CTkFrame(left, fg_color="#F3F4F6", corner_radius=10, width=56, height=56)
+        cover.grid(row=0, column=0, rowspan=2, padx=(0, 12), pady=16)
+        cover.grid_propagate(False)
+        ctk.CTkLabel(cover, text="IMG", text_color="#6B7280").pack(expand=True)
+
+        ctk.CTkLabel(left, text="Música atual (demo)", text_color=BLACK, font=ctk.CTkFont(weight="bold")).grid(row=0, column=1, sticky="w")
+        ctk.CTkLabel(left, text="Artista", text_color="#4B5563").grid(row=1, column=1, sticky="w")
+
+        # centro: botões + barra de tempo
+        center = ctk.CTkFrame(self.player, fg_color=WHITE)
+        center.grid(row=0, column=1, sticky="ew")
+        center.grid_columnconfigure(0, weight=1)
+
+        btns = ctk.CTkFrame(center, fg_color=WHITE)
+        btns.pack(pady=(12, 6))
+
+        def purple_btn(text, cmd=None):
+            return ctk.CTkButton(btns, text=text, width=48, height=34,
+                                 fg_color=PURPLE, hover_color=PURPLE_HOVER, text_color="white",
+                                 command=cmd)
+
+        purple_btn("⏮").pack(side="left", padx=6)
+        purple_btn("⏯").pack(side="left", padx=6)
+        purple_btn("⏭").pack(side="left", padx=6)
+
+        time_row = ctk.CTkFrame(center, fg_color=WHITE)
+        time_row.pack(fill="x", padx=18)
+
+        ctk.CTkLabel(time_row, text="0:00", text_color=BLACK).pack(side="left")
+        self.progress = ctk.CTkSlider(time_row, from_=0, to=100, number_of_steps=100)
+        self.progress.pack(side="left", fill="x", expand=True, padx=10)
+        ctk.CTkLabel(time_row, text="4:05", text_color=BLACK).pack(side="left")
+
+
+if __name__ == "__main__":
+    app = App()
+    app.mainloop()
