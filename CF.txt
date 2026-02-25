@@ -4,11 +4,11 @@ from PIL import Image
 
 # ========= TEMA / CORES =========
 ctk.set_appearance_mode("light")     # fundo claro
-ctk.set_default_color_theme("blue")  # vamos setar roxo nos botões manualmente
+ctk.set_default_color_theme("blue")  
 
 WHITE = "#FFFFFF"
 BLACK = "#111111"
-PURPLE = "#6D28D9"   # roxo bonito
+PURPLE = "#6D28D9"   # roxo 
 PURPLE_HOVER = "#5B21B6"
 BORDER = "#E5E7EB"
 
@@ -81,7 +81,7 @@ class LoginScreen(ctk.CTkFrame):
             self.msg.configure(text="Usuário ou senha incorretos", text_color="red")
 
 
-# ========= HOME / SPOTIFY-LIKE =========
+# ========= HOME =========
 class HomeScreen(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master, fg_color=WHITE)
@@ -359,4 +359,5 @@ class HomeScreen(ctk.CTkFrame):
 
 if __name__ == "__main__":
     app = App()
+
     app.mainloop()
